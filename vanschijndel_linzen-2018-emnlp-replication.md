@@ -8,9 +8,9 @@ Note: Currently, these instructions only extend through Section 3 and semi-throu
 * Get [Modelblocks](https://github.com/modelblocks/modelblocks-release)
 * Get the [NaturalStories corpus](https://github.com/languageMIT/naturalstories)
 
-Within the modelblocks-release/config directory create a `user-naturalstories-directory.txt` with the absolute path to your naturalstories directory.
+Within the `modelblocks-release/config` directory create a `user-naturalstories-directory.txt` containing the absolute path to your naturalstories directory.
 
-In the modelblocks-release/ directory:  
+In the `modelblocks-release/` directory:  
 
     make workspace  
     cd workspace  
@@ -29,24 +29,24 @@ In the modelblocks-release/ directory:
     cat genmodel/naturalstories.{7,8,9}.linetoks > genmodel/naturalstories.doc.linetoks
 
 Each linetoks file contains the corpus, formatted as LM input
-* naturalstories.linetoks is the entire corpus  
+* `naturalstories.linetoks` is the entire corpus  
 * each numbered linetoks contains a single story  
-* %fairy.linetoks contains all the fairytale documents  
-* %doc.linetoks contains all the documentary documents
+* `%fairy.linetoks` contains all the fairytale documents  
+* `%doc.linetoks` contains all the documentary documents
 
 ## Section 3
 
-* Put the %linetoks files in a subdirectory `natstor` within the neural-complexity/data directory
-* Put the LM model and vocab in the neural-complexity directory
+* Put the `%linetoks` files in a subdirectory `natstor` within the `neural-complexity/data` directory
+* Put the LM model and vocab in the `neural-complexity` directory
 
 ### Analysis 1
 
-Use the quickstart adaptation command to adapt to naturalstories.linetoks  
+Use the quickstart adaptation command to adapt to `naturalstories.linetoks`  
 
     time python main.py --model_file 'hidden650_batch128_dropout0.2_lr20.0.pt' --vocab_file 'vocab.txt' --cuda --data_dir './data/natstor/' --testfname 'naturalstories.linetoks' --test --words --adapt --adapted_model 'adapted_model.pt' > full_corpus.adapted.results  
     time python main.py --model_file 'hidden650_batch128_dropout0.2_lr20.0.pt' --vocab_file 'vocab.txt' --cuda --data_dir './data/natstor/' --testfname 'naturalstories.linetoks' --test --words > full_corpus.notadapted.results  
 
-The final line of full_corpus.{adapted,notadapted}.results provides the perplexity results
+The final line of `full_corpus.{adapted,notadapted}.results` provides the perplexity results
 
 ### Analysis 2
 
@@ -57,4 +57,4 @@ Repeat the above with each of `genmodel/naturalstories.{0,1,2,3,4,5,6}.linetoks`
 
 ## Section 4
 
-Use modelblocks to generate an %all-itemmeasures for naturalstories, and run the regression using the `surp` column in the above %results files.
+Use modelblocks to generate an `%all-itemmeasures` for naturalstories, and run the regression using the `surp` column in the above `%results` files.
