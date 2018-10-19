@@ -11,6 +11,7 @@ Note: Currently, these instructions only extend through Section 3 and semi-throu
 Within the modelblocks-release/config directory create a `user-naturalstories-directory.txt` with the absolute path to your naturalstories directory.
 
 In the modelblocks-release/ directory:  
+
     make workspace  
     cd workspace  
     make genmodel/naturalstories.linetoks  
@@ -41,6 +42,7 @@ Each linetoks file contains the corpus, formatted as LM input
 ### Analysis 1
 
 Use the quickstart adaptation command to adapt to naturalstories.linetoks  
+
     time python main.py --model_file 'hidden650_batch128_dropout0.2_lr20.0.pt' --vocab_file 'vocab.txt' --cuda --data_dir './data/natstor/' --testfname 'naturalstories.linetoks' --test --words --adapt --adapted_model 'adapted_model.pt' > full_corpus.adapted.results  
     time python main.py --model_file 'hidden650_batch128_dropout0.2_lr20.0.pt' --vocab_file 'vocab.txt' --cuda --data_dir './data/natstor/' --testfname 'naturalstories.linetoks' --test --words > full_corpus.notadapted.results  
 
