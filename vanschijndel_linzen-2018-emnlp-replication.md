@@ -62,7 +62,7 @@ You'll need `R` along with the following R packages:
 * optimx
 * lme4
 
-* Get [R-hacks](https://github.com/aufrank/R-hacks)
+Then you'll need to get [R-hacks](https://github.com/aufrank/R-hacks).
 
 Copy the scripts within the `R-hacks` repository into the `modelblocks-release/resources-rhacks/scripts` directory
 
