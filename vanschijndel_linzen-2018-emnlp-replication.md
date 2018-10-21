@@ -57,6 +57,11 @@ Repeat the above with each of `genmodel/naturalstories.{0,1,2,3,4,5,6}.linetoks`
 
 ## Section 4
 
+You'll need `R` along with the following R packages:
+* optparse
+* optimx
+* lme4
+
 * Get [R-hacks](https://github.com/aufrank/R-hacks)
 
 Copy the scripts within the `R-hacks` repository into the `modelblocks-release/resources-rhacks/scripts` directory
