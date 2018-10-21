@@ -57,6 +57,10 @@ Repeat the above with each of `genmodel/naturalstories.{0,1,2,3,4,5,6}.linetoks`
 
 ## Section 4
 
+* Get [R-hacks](https://github.com/aufrank/R-hacks)
+
+Within the `modelblocks-release/config` directory create a `user-rhacks-directory.txt` containing the absolute path to your R-hacks directory.
+
 Use the results from Section 3 Analysis 3, which I'll refer to as `naturalstories.0.{adapt,noadapt}.results`, etc based on the numbers in the linetoks filenames and on whether the model was adaptive or not.
 
 Rename the `surp` column in `naturalstories.0.noadapt.results` to `surpnoa`
