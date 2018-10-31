@@ -130,10 +130,38 @@ Now we use the `naturalstories.lstm.filt.evmeasures` file for regressions:
 
 Requires stimuli from Fine and Jaeger (2016)
 
-## Section 5.2
-
 TBD
 
+## Section 5.2
+
+* Build the dative dataset (requires the Wikitext-2 `train.txt` data included with `neural-complexity`)
+
+    # This command will generate an output directory  
+    #  and fill it with 10 dev and test pairs for each of DO and PO  
+    # They will be named prepobjs.100-1000.{dev,test}.{0..9}.sents (including controls)  
+    # They will be named prepobjs.100-0.{dev,test}.{0..9}.sents (no controls)  
+    # There are parameters that can be tweaked at the beginning of genlists.py  
+    python scripts/genlists.py prepobjs.dev.sents doubleobjects.dev.sents prepobjs.test.sents doubleobjects.test.sents train.txt
+
+* Move `datives` into the `neural-complexity/data/`
+* Go to `neural-complexity` and make some directories to store models and output
+
+    mkdir dative-models  
+    mkdir dative-output
+
+* Run the adaptive mechanism over a dev set and then freeze the weights and test against the corresponding test sets
+
+    i=0; # This is used to iterate over all the input files  
+    python -u main.py --words --test --lr 20.0 --vocab_file "vocab.txt" --model_file "hidden650_batch128_dropout0.2_lr20.0.pt" --adapted_model "dative-models/dodev.$i.adapted.pt" --tied --cuda --data_dir ./data/datives/ --adapt --testfname doubleobj.100-1000.dev.$i.sents > dative-output/dodev-$i.training  
+    python -u main.py --words --test --lr 20.0 --vocab_file "vocab.txt" --model_file "dative-models/dodev.$i.adapted.pt" --tied --cuda --data_dir ./data/datives/ --testfname doubleobj.100-1000.dev.$i.sents > dative-output/dodev-$i.test-do  
+    python -u main.py --words --test --lr 20.0 --vocab_file "vocab.txt" --model_file "dative-models/dodev.$i.adapted.pt" --tied --cuda --data_dir ./data/datives/ --testfname prepobj.100-1000.dev.$i.sents > dative-output/dodev-$i.test-po  
+    # Repeat the above but switch DO with PO  
+    python -u main.py --words --test --lr 20.0 --vocab_file "vocab.txt" --model_file "hidden650_batch128_dropout0.2_lr20.0.pt" --adapted_model "dative-models/podev.$i.adapted.pt" --tied --cuda --data_dir ./data/datives/ --adapt --testfname prepobj.100-1000.dev.$i.sents > dative-output/podev-$i.training  
+    python -u main.py --words --test --lr 20.0 --vocab_file "vocab.txt" --model_file "dative-models/podev.$i.adapted.pt" --tied --cuda --data_dir ./data/datives/ --testfname doubleobj.100-1000.dev.$i.sents > dative-output/podev-$i.test-do  
+    python -u main.py --words --test --lr 20.0 --vocab_file "vocab.txt" --model_file "dative-models/podev.$i.adapted.pt" --tied --cuda --data_dir ./data/datives/ --testfname prepobj.100-1000.dev.$i.sents > dative-output/podev-$i.test-po
+
+* Increment `i` in the above code block and repeat for each dev set (default: 0..10)
+    
 ## Section 6
 
 * Get the [MultiNLI corpus](https://www.nyu.edu/projects/bowman/multinli/)
