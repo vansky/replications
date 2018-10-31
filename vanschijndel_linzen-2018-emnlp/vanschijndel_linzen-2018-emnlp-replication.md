@@ -12,6 +12,7 @@ Within the `modelblocks-release/config` directory create a `user-naturalstories-
 
 In the `modelblocks-release/` directory:  
 
+```
     make workspace  
     cd workspace  
     make genmodel/naturalstories.linetoks  
@@ -27,6 +28,7 @@ In the `modelblocks-release/` directory:
     cat genmodel/naturalstories.linetoks | head -n 485 | tail -n 43 > genmodel/naturalstories.9.linetoks  
     cat genmodel/naturalstories.{0,1,2,3,4,5,6}.linetoks > genmodel/naturalstories.fairy.linetoks  
     cat genmodel/naturalstories.{7,8,9}.linetoks > genmodel/naturalstories.doc.linetoks
+```
 
 Each linetoks file contains the corpus, formatted as LM input
 * `naturalstories.linetoks` is the entire corpus  
@@ -43,8 +45,10 @@ Each linetoks file contains the corpus, formatted as LM input
 
 Use the quickstart adaptation command to adapt to `naturalstories.linetoks`  
 
+```
     time python main.py --model_file 'hidden650_batch128_dropout0.2_lr20.0.pt' --vocab_file 'vocab.txt' --cuda --single --data_dir './data/natstor/' --testfname 'naturalstories.linetoks' --test --words --adapt --adapted_model 'adapted_model.pt' > full_corpus.adapted.results  
     time python main.py --model_file 'hidden650_batch128_dropout0.2_lr20.0.pt' --vocab_file 'vocab.txt' --cuda --single --data_dir './data/natstor/' --testfname 'naturalstories.linetoks' --test --words > full_corpus.notadapted.results  
+```
 
 The final line of `full_corpus.{adapted,notadapted}.results` provides the perplexity results
 
@@ -70,14 +74,19 @@ Use the results from Section 3 Analysis 3, which I'll refer to as `naturalstorie
 
 Rename the `surp` column in `naturalstories.0.noadapt.results` to `surpnoa`
 
+```
     sed -i '1 s/surp/surpnoa/' naturalstories.0.noadapt.results
+```
 
 Paste the `surpnoa` column from each `%noadapt.results` file to the corresponding `%adapt.results` file.
 
+```
     n=0; paste -d' ' <(cut -d' ' -f-5 "naturalstories.${n}.adapt.results") <(cut -d' ' -f5 "naturalstories.${n}.noadapt.results") <(cut -d' ' -f6- "naturalstories.${n}.adapt.results") > naturalstories.${n}.results
+```
 
 Increment $n until all files have been joined. Then create one long `%results` file
 
+```
     head -n -3 naturalstories.0.results > naturalstories.full.results  
     head -n -3 naturalstories.1.results | tail -n+2 >> naturalstories.full.results  
     head -n -3 naturalstories.2.results | tail -n+2 >> naturalstories.full.results  
@@ -88,12 +97,14 @@ Increment $n until all files have been joined. Then create one long `%results` f
     head -n -3 naturalstories.7.results | tail -n+2 >> naturalstories.full.results  
     head -n -3 naturalstories.8.results | tail -n+2 >> naturalstories.full.results  
     head -n -3 naturalstories.9.results | tail -n+2 >> naturalstories.full.results  
+```
 
 Copy `naturalstories.full.results` to your `modelblocks-release/workspace/` directory  
 Copy `naturalstories/naturalstories_RTS/processed_RTs.tsv` to the `modelblocks-release/workspace` directory and cd to that directory.  
 
 Note: This next section could be made easier, but the modelblocks target syntax changes occasionally (and is currently going through changes as I write this), so to better future-proof things, we'll manually generate most of the needed files. 
 
+```
     make genmodel/naturalstories.mfields.itemmeasures  
     echo 'word' > natstor.toks  
     sed 's/ /\n/g' genmodel/naturalstories.linetoks >> natstor.toks  
@@ -102,29 +113,36 @@ Note: This next section could be made easier, but the modelblocks target syntax 
     python ../resource-naturalstories/scripts/merge_natstor.py <(cat processed_RTs.tsv | sed 's/\t/ /g;s/peaked/peeked/g;' | python ../resource-rt/scripts/rename_cols.py WorkerId subject RT fdur) naturalstories.lstm.mergable.itemmeasures | sed 's/``/'\''/g;s/'\'\''/'\''/g;s/(/-LRB-/g;s/)/-RRB-/g;' | python ../resource-rt/scripts/rename_cols.py item docid > naturalstories.lstm.core.evmeasures  
     python ../resource-rt/scripts/rm_unfix_items.py < naturalstories.lstm.core.evmeasures | python ../resource-rt/scripts/rm_na_items.py > naturalstories.lstm.filt.evmeasures  
     mkdir scripts  
-    
+```
+
 Create a `scripts/spr.lmeform` with the following:
 
+```
     fdur  
     z.(wlen) + z.(sentpos)  
     z.(wlen) + z.(sentpos)  
     (1 | word)
+```
 
 Now we use the `naturalstories.lstm.filt.evmeasures` file for regressions:
 
 #### Dev regressions
 
+```
     ../resource-lmefit/scripts/evmeasures2lmefit.r naturalstories.lstm.filt.evmeasures naturalstories.lstm.filt.base.lme.rdata -d -N -S -C -F -A surp+surpnoa -a surp+surpnoa -b scripts/spr.lmeform > naturalstories.lstm.filt.-NSCFd.base.lme  
     ../resource-lmefit/scripts/evmeasures2lmefit.r naturalstories.lstm.filt.evmeasures naturalstories.lstm.filt.surp.lme.rdata -d -N -S -C -F -A surp+surpnoa -a surpnoa -b scripts/spr.lmeform > naturalstories.lstm.filt.-NSCFd.surp.lme  
     ../resource-lmefit/scripts/evmeasures2lmefit.r naturalstories.lstm.filt.evmeasures naturalstories.lstm.filt.surpnoa.lme.rdata -d -N -S -C -F -A surp+surpnoa -a surp -b scripts/spr.lmeform > naturalstories.lstm.filt.-NSCFd.surpnoa.lme  
     ../resource-lmefit/scripts/evmeasures2lmefit.r naturalstories.lstm.filt.evmeasures naturalstories.lstm.filt.both.lme.rdata -d -N -S -C -F -A surp+surpnoa -b scripts/spr.lmeform > naturalstories.lstm.filt.-NSCFd.both.lme  
+```
 
 #### Test regressions
 
+```
     ../resource-lmefit/scripts/evmeasures2lmefit.r naturalstories.lstm.filt.evmeasures naturalstories.lstm.filt.base.lme.rdata -t -N -S -C -F -A surp+surpnoa -a surp+surpnoa -b scripts/spr.lmeform > naturalstories.lstm.filt.-NSCFt.base.lme  
     ../resource-lmefit/scripts/evmeasures2lmefit.r naturalstories.lstm.filt.evmeasures naturalstories.lstm.filt.surp.lme.rdata -t -N -S -C -F -A surp+surpnoa -a surpnoa -b scripts/spr.lmeform > naturalstories.lstm.filt.-NSCFt.surp.lme  
     ../resource-lmefit/scripts/evmeasures2lmefit.r naturalstories.lstm.filt.evmeasures naturalstories.lstm.filt.surpnoa.lme.rdata -t -N -S -C -F -A surp+surpnoa -a surp -b scripts/spr.lmeform > naturalstories.lstm.filt.-NSCFt.surpnoa.lme  
     ../resource-lmefit/scripts/evmeasures2lmefit.r naturalstories.lstm.filt.evmeasures naturalstories.lstm.filt.both.lme.rdata -t -N -S -C -F -A surp+surpnoa -b scripts/spr.lmeform > naturalstories.lstm.filt.-NSCFt.both.lme  
+```
 
 ## Section 5.1
 
@@ -136,21 +154,26 @@ TBD
 
 * Build the dative dataset (requires the Wikitext-2 `train.txt` data included with `neural-complexity`)
 
+```
     # This command will generate an output directory  
     #  and fill it with 10 dev and test pairs for each of DO and PO  
     # They will be named prepobjs.100-1000.{dev,test}.{0..9}.sents (including controls)  
     # They will be named prepobjs.100-0.{dev,test}.{0..9}.sents (no controls)  
     # There are parameters that can be tweaked at the beginning of genlists.py  
     python scripts/genlists.py prepobjs.dev.sents doubleobjects.dev.sents prepobjs.test.sents doubleobjects.test.sents train.txt
+```
 
 * Move `datives` into the `neural-complexity/data/`
 * Go to `neural-complexity` and make some directories to store models and output
 
+```
     mkdir dative-models  
     mkdir dative-output
+```
 
 * Run the adaptive mechanism over a dev set and then freeze the weights and test against the corresponding test sets
 
+```
     i=0; # This is used to iterate over all the input files  
     python -u main.py --words --test --lr 20.0 --vocab_file "vocab.txt" --model_file "hidden650_batch128_dropout0.2_lr20.0.pt" --adapted_model "dative-models/dodev.$i.adapted.pt" --tied --cuda --data_dir ./data/datives/ --adapt --testfname doubleobj.100-1000.dev.$i.sents > dative-output/dodev-$i.training  
     python -u main.py --words --test --lr 20.0 --vocab_file "vocab.txt" --model_file "dative-models/dodev.$i.adapted.pt" --tied --cuda --data_dir ./data/datives/ --testfname doubleobj.100-1000.dev.$i.sents > dative-output/dodev-$i.test-do  
@@ -159,6 +182,7 @@ TBD
     python -u main.py --words --test --lr 20.0 --vocab_file "vocab.txt" --model_file "hidden650_batch128_dropout0.2_lr20.0.pt" --adapted_model "dative-models/podev.$i.adapted.pt" --tied --cuda --data_dir ./data/datives/ --adapt --testfname prepobj.100-1000.dev.$i.sents > dative-output/podev-$i.training  
     python -u main.py --words --test --lr 20.0 --vocab_file "vocab.txt" --model_file "dative-models/podev.$i.adapted.pt" --tied --cuda --data_dir ./data/datives/ --testfname doubleobj.100-1000.dev.$i.sents > dative-output/podev-$i.test-do  
     python -u main.py --words --test --lr 20.0 --vocab_file "vocab.txt" --model_file "dative-models/podev.$i.adapted.pt" --tied --cuda --data_dir ./data/datives/ --testfname prepobj.100-1000.dev.$i.sents > dative-output/podev-$i.test-po
+```
 
 * Increment `i` in the above code block and repeat for each dev set (default: 0..10)
     
