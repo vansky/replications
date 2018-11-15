@@ -1,6 +1,6 @@
 # Replication instructions for A Neural Model of Adaptation in Reading (van Schijndel and Linzen, 2018)
 
-Note: Currently, these instructions only extend through Section 4, but if there is demand, I can extend these further.
+Note: Currently, these instructions only include Sections 1-4 and 5.2, but if there is demand, I can extend these further.
 
 * Get [the adaptive LM](https://github.com/vansky/neural-complexity)
 * Get [the base LM weights](https://s3.amazonaws.com/colorless-green-rnns/best-models/English/hidden650_batch128_dropout0.2_lr20.0.pt)
