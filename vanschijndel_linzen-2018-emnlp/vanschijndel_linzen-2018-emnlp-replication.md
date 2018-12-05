@@ -5,14 +5,18 @@ Note: Currently, these instructions only include Sections 1-4 and 5.2, but if th
 * Get [the adaptive LM](https://github.com/vansky/neural-complexity)
 * Get [the base LM weights](https://s3.amazonaws.com/colorless-green-rnns/best-models/English/hidden650_batch128_dropout0.2_lr20.0.pt)
 * Get [the model vocabulary](https://s3.amazonaws.com/colorless-green-rnns/training-data/English/vocab.txt)
+* Get the [Extended Penn Tokenizer](https://github.com/vansky/extended_penn_tokenizer)
 * Get [Modelblocks](https://github.com/modelblocks/modelblocks-release)
 * Get the [NaturalStories corpus](https://github.com/languageMIT/naturalstories)
 
-Within the `modelblocks-release/config` directory create a `user-naturalstories-directory.txt` containing the absolute path to your naturalstories directory.
+For these instructions, I assume the above repositories are located at `/XPATH/` (such as `/XPATH/naturalstories`). Just change that location to match the absolute path of the given repository.
 
 In the `modelblocks-release/` directory:  
 
 ```
+    mkdir config  
+    echo '/XPATH/naturalstories/' > config/user-naturalstories-directory.txt  
+    echo '/XPATH/extended_penn_tokenizer/' > config/user-tokenizer-directory.txt  
     make workspace  
     cd workspace  
     make genmodel/naturalstories.linetoks  
