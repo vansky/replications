@@ -2,6 +2,8 @@
 
 Note: Currently, these instructions only include Sections 1-4 and 5.2, but if there is demand, I can extend these further.
 
+If you run into problems with the `make` commands, go to the bottom of these instructions for step-by-step instructions to manually complete the `make` steps, bypassing make.
+
 * Get [the adaptive LM](https://github.com/vansky/neural-complexity)
 * Get [the base LM weights](https://s3.amazonaws.com/colorless-green-rnns/best-models/English/hidden650_batch128_dropout0.2_lr20.0.pt)
 * Get [the model vocabulary](https://s3.amazonaws.com/colorless-green-rnns/training-data/English/vocab.txt)
@@ -195,3 +197,22 @@ TBD
 * Get the [MultiNLI corpus](https://www.nyu.edu/projects/bowman/multinli/)
 
 TBD
+
+## Bypassing Make
+
+Make can be a pain to get working. These are the instructions for manually building each of the items for which I invoked `make` above. 
+
+All of these instructions will require you to change `/XPATH` to the relevant path for each item, based on where the given resource is on your computer. Further `python` commands use python 2.x and `python3` commands use python 3.x, so you will need to change those calls if your computer is setup with `python2` as python 2.x and `python` as python 3.x.
+
+### make genmodel/naturalstories.linetoks
+
+    cat /XPATH/naturalstories/parses/penn/all-parses.txt.penn | perl /XPATH/modelblocks-release/resource-linetrees/scripts/editabletrees2linetrees.pl > genmodel/naturalstories.penn.linetrees  
+    cat genmodel/naturalstories.penn.linetrees | python /XPATH/modelblocks-release/resource-naturalstories/scripts/penn2sents.py | sed 's/``/'\''/g;s/'\'\''/'\''/g;s/(/-LRB-/g;s/)/-RRB-/g;s/peaked/peeked/g;' > genmodel/naturalstories.linetoks
+    
+### make genmodel/naturalstories.mfields.itemmeasures
+
+    cat /XPATH/naturalstories_RTS/all_stories.tok | sed 's/\t/ /g;s/``/'\''/g;s/'\'\''/'\''/g;s/(/-LRB-/g;s/)/-RRB-/g;s/peaked/peeked/g;' | python /XPATH/modelblocks-release/resource-rt/scripts/toks2sents.py genmodel/naturalstories.linetoks > genmodel/naturalstories.lineitems  
+    paste -d' ' <(cat /XPATH/naturalstories/naturalstories_RTS/all_stories.tok | sed 's/\t/ /g;s/peaked/peeked/g') <(cat genmodel/naturalstories.lineitems | python /XPATH/modelblocks-release/resource-rt/scripts/sents2sentids.py | cut -d' ' -f 2-) \  
+    <(cat /XPATH/naturalstories/naturalstories_RTS/all_stories.tok | sed 's/\t/ /g;' | awk -f /XPATH/modelblocks-release/resource-rt/scripts/filter_cols.awk -v cols=item - | python /XPATH/modelblocks-release/resource-rt/scripts/rename_cols.py item docid) > genmodel/naturalstories.mfields.itemmeasures  
+    rm genmodel/naturalstories.lineitems  
+
