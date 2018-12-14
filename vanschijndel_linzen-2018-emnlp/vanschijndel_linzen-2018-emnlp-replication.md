@@ -1,7 +1,5 @@
 # Replication instructions for A Neural Model of Adaptation in Reading (van Schijndel and Linzen, 2018)
 
-Note: Currently, these instructions only include Sections 1-4 and 5.2, but if there is demand, I can extend these further.
-
 If you run into problems with the `make` commands, go to the bottom of these instructions for step-by-step instructions to manually complete the `make` steps, bypassing make.
 
 * Get [the adaptive LM](https://github.com/vansky/neural-complexity)
@@ -152,9 +150,67 @@ Now we use the `naturalstories.lstm.filt.evmeasures` file for regressions:
 
 ## Section 5.1
 
-Requires stimuli from Fine and Jaeger (2016)
+Requires stimuli from Fine and Jaeger (2016), which come in the form of 16 lists: `ListA1`, `ListA1_reversed`, `ListA2`, etc.
 
-TBD
+Ensure that the stimulus sentences are tokenized properly by passing them through the `extended_penn_tokenizer`. The below commands assume these are named things like `ListA1.linetoks` 
+
+Put the lists in `data/fj16`
+
+```
+    mkdir fj-output  
+
+    list=ListA1  
+    
+    time python main.py --model_file 'hidden650_batch128_dropout0.2_lr20.0.pt' --vocab_file 'vocab.txt' --cuda --single --data_dir './data/fj16/' --testfname "${list}.linetoks" --test --words > "fj-output/${list}.adapting.output"  
+    time python main.py --model_file 'hidden650_batch128_dropout0.2_lr20.0.pt' --vocab_file 'vocab.txt' --cuda --single --lr ${learnrate} --data_dir './data/fj16/' --testfname "${list}.linetoks" --test --words --adapt --adapted_model "fj-output/adapted_model-${list}.pt" > "fj-output/${list}.adapting.output"  
+
+```
+
+Repeat the above for each list.
+
+I'll just roughly sketch out the rest of this section because it's pretty straight-forward:
+
+Using the original list files, merge the stimulus conditions into the model output based on the sentence IDs.
+
+If you load each list into pandas, you can use this python function to identify the disambiguating regions based on sentence position:
+
+```
+    def add_regionnums(row):  
+      if row['condition'] == 'ambiguous' and row['sentpos'] in (7,8,9):  
+        #ambiguous critical region starts with word 7  
+        return(3)  
+      elif row['condition'] == 'unambiguous' and row['sentpos'] in (9,10,11):  
+        #unambiguous critical region starts with word 9  
+        return(3)  
+      else:  
+        return(0)  
+  
+    data['region'] = data.apply(lambda row: addregionnums(row),axis=1)  
+    data=data[data['region']==3]  
+    data=data[data['condition']!='filler'].reset_index().drop('index',axis=1)  
+    data=data.groupby(('sentid','condition')).agg('mean').reset_index()  
+    data['order']=range(40)
+```
+
+After processing each list via the above python code, concatenate all the lists together into a long data file. It must have columns for `condition` (ambiguous vs unambiguous), `order`, and `sentid`. Read that file into R:
+
+```
+    library('ggplot2')  
+    library('stringr')  
+    theme_set(theme_gray(base_size = 16))  
+      
+    df <- read.table('finejaeger.csv',sep=',',header=T)  
+    df$residsurp <- residuals(lm(surp~sentid,data=df))  
+      
+    ggplot(df, aes(order+1, residsurp, group = condition, colour = condition, fill = condition)) +  
+                 stat_summary(fun.y=mean, geom="point", aes(colour=condition,shape=shape)) +  
+                 geom_smooth(method = lm, formula = y ~ log(x+1), aes(linetype=condition)) +  
+                 scale_colour_manual("condition",labels=c('ambiguous','unambiguous'),values=mypal) +  
+                 scale_shape_manual("condition",labels=c('ambiguous','unambiguous'),values=c(1,2)) +  
+                 scale_linetype_manual("condition",labels=c('ambiguous','unambiguous'),values=c('solid','dashed')) +  
+                 xlab('Item order (#RCs seen)') +  
+                 ylab('Order-corrected surprisal (bits)')  
+```
 
 ## Section 5.2
 
@@ -196,7 +252,42 @@ TBD
 
 * Get the [MultiNLI corpus](https://www.nyu.edu/projects/bowman/multinli/)
 
-TBD
+```
+    mkdir data/multinli  
+    cat /XPATH/multinli_1.0/multinli_1.0_dev_mismatched.txt <( tail -n+2 /XPATH/multinli_1.0/multinli_1.0_dev_matched.txt ) | scripts/split_multinli.py /XPATH/neural-complexity/data/multinli dev  
+```
+
+Now you should have files like `neural-complexity/data/multinli/fiction-dev.txt`. In this work, we ignore the training sets in order to make use of all 10 genres in the corpus, but that means we need to generate train/test sets from the dev corpora. Within the `neural-complexity` directory:
+
+```
+    genre=fiction;
+    head -n1000 data/multinli/$genre-dev.txt > data/multinli/$genre-dev1.txt  
+    tail -n+1001 data/multinli/$genre-dev.txt > data/multinli/$genre-dev2.txt
+```
+
+Repeat the above for each of the ten genres.
+
+```
+   mkdir multinli-output  
+   
+   # Generate the non-adaptive and adaptive baselines  
+   genre='government'  
+   time python main.py --model_file 'hidden650_batch128_dropout0.2_lr20.0.pt' --vocab_file 'vocab.txt' --cuda --single --data_dir './data/multinli/' --testfname "${genre}-dev2.txt" --test --words > "multinli-output/${genre}.noadapt.output"  
+   time python main.py --model_file 'hidden650_batch128_dropout0.2_lr20.0.pt' --vocab_file 'vocab.txt' --cuda --single --data_dir './data/multinli/' --testfname "${genre}-dev1.txt" --test --words --adapt --adapted_model "multinli-output/adapted_model-${genre}.pt" > "multinli-output/${genre}.adapting.output"  
+   time python main.py --model_file "multinli-output/adapted_model-${genre}.pt" --vocab_file 'vocab.txt' --cuda --single --data_dir './data/multinli/' --testfname "${genre}-dev2.txt" --test --words > "multinli-output/${genre}.postadapt.output"  
+```
+
+Repeat the above for each of the ten genres. Note that we always test on `dev2` while we adapt to `dev1` in order to avoid training on test data.
+
+```
+    genre1='government'  
+    genre2='fiction'  
+    time python main.py --model_file "multinli-output/adapted_model-${genre1}.pt" --vocab_file 'vocab.txt' --cuda --single --data_dir './data/multinli/' --testfname "${genre2}-dev1.txt" --test --words --adapt --adapted_model "multinli-output/adapted_model-${genre1}-${genre2}.pt" > "multinli-output/${genre1}.${genre2}.adapting2.output"  
+    time python main.py --model_file "multinli-output/adapted_model-${genre1}-${genre2}.pt" --vocab_file 'vocab.txt' --cuda --single --data_dir './data/multinli/' --testfname "${genre1}-dev2.txt" --test --words > "multinli-output/${genre1}.${genre2}.postadapt2.output"  
+
+```
+
+Repeat the above for every pair of genres where `genre1` != `genre2`. The final line of each file should report perplexity, so just compare the perplexity distribution of `multinli-output/*.noadapt.output` to `multinli-output/*.postadapt.output` to `multinli-output/*.postadapt2.output`.
 
 ## Bypassing Make
 
@@ -206,13 +297,16 @@ All of these instructions will require you to change `/XPATH` to the relevant pa
 
 ### make genmodel/naturalstories.linetoks
 
+```
     cat /XPATH/naturalstories/parses/penn/all-parses.txt.penn | perl /XPATH/modelblocks-release/resource-linetrees/scripts/editabletrees2linetrees.pl > genmodel/naturalstories.penn.linetrees  
-    cat genmodel/naturalstories.penn.linetrees | python /XPATH/modelblocks-release/resource-naturalstories/scripts/penn2sents.py | sed 's/``/'\''/g;s/'\'\''/'\''/g;s/(/-LRB-/g;s/)/-RRB-/g;s/peaked/peeked/g;' > genmodel/naturalstories.linetoks
-    
+    cat genmodel/naturalstories.penn.linetrees | python /XPATH/modelblocks-release/resource-naturalstories/scripts/penn2sents.py | sed 's/``/'\''/g;s/'\'\''/'\''/g;s/(/-LRB-/g;s/)/-RRB-/g;s/peaked/peeked/g;' > genmodel/naturalstories.linetoks  
+```
+
 ### make genmodel/naturalstories.mfields.itemmeasures
 
+```
     cat /XPATH/naturalstories_RTS/all_stories.tok | sed 's/\t/ /g;s/``/'\''/g;s/'\'\''/'\''/g;s/(/-LRB-/g;s/)/-RRB-/g;s/peaked/peeked/g;' | python /XPATH/modelblocks-release/resource-rt/scripts/toks2sents.py genmodel/naturalstories.linetoks > genmodel/naturalstories.lineitems  
     paste -d' ' <(cat /XPATH/naturalstories/naturalstories_RTS/all_stories.tok | sed 's/\t/ /g;s/peaked/peeked/g') <(cat genmodel/naturalstories.lineitems | python /XPATH/modelblocks-release/resource-rt/scripts/sents2sentids.py | cut -d' ' -f 2-) \  
     <(cat /XPATH/naturalstories/naturalstories_RTS/all_stories.tok | sed 's/\t/ /g;' | awk -f /XPATH/modelblocks-release/resource-rt/scripts/filter_cols.awk -v cols=item - | python /XPATH/modelblocks-release/resource-rt/scripts/rename_cols.py item docid) > genmodel/naturalstories.mfields.itemmeasures  
     rm genmodel/naturalstories.lineitems  
-
+```
