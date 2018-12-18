@@ -2,8 +2,8 @@
 
 If you run into problems with the `make` commands, go to the bottom of these instructions for step-by-step instructions to manually complete the `make` steps, bypassing make.
 
-* Get [the adaptive LM](https://github.com/vansky/neural-complexity)
-  After cloning the repo, `git checkout tags/v1.0.0` to obtain the correct version  
+* Get [the adaptive LM](https://github.com/vansky/neural-complexity)  
+  After cloning the LM repo, `git checkout tags/v1.0.0` to obtain the correct version  
 
 * Get [the base LM weights](https://s3.amazonaws.com/colorless-green-rnns/best-models/English/hidden650_batch128_dropout0.2_lr20.0.pt)
 * Get [the model vocabulary](https://s3.amazonaws.com/colorless-green-rnns/training-data/English/vocab.txt)
