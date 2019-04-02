@@ -285,7 +285,6 @@ Repeat the above for each of the ten genres. Note that we always test on `dev2` 
     genre2='fiction'  
     time python main.py --model_file "multinli-output/adapted_model-${genre1}.pt" --vocab_file 'vocab.txt' --cuda --single --data_dir './data/multinli/' --testfname "${genre2}-dev1.txt" --test --words --adapt --adapted_model "multinli-output/adapted_model-${genre1}-${genre2}.pt" > "multinli-output/${genre1}.${genre2}.adapting2.output"  
     time python main.py --model_file "multinli-output/adapted_model-${genre1}-${genre2}.pt" --vocab_file 'vocab.txt' --cuda --single --data_dir './data/multinli/' --testfname "${genre1}-dev2.txt" --test --words > "multinli-output/${genre1}.${genre2}.postadapt2.output"  
-
 ```
 
 Repeat the above for every pair of genres where `genre1` != `genre2`. The final line of each file should report perplexity, so just compare the perplexity distribution of `multinli-output/*.noadapt.output` to `multinli-output/*.postadapt.output` to `multinli-output/*.postadapt2.output`.
