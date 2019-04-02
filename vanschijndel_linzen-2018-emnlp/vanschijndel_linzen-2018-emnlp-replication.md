@@ -121,7 +121,7 @@ Note: This next section could be made easier, but the modelblocks target syntax 
     mkdir scripts  
 ```
 
-Create a `scripts/spr.lmeform` with the following:
+Create a `scripts/spr.lmeform` file that contains these lines:
 
 ```
     fdur  
@@ -164,8 +164,7 @@ Put the lists in `data/fj16`
     list=ListA1  
     
     time python main.py --model_file 'hidden650_batch128_dropout0.2_lr20.0.pt' --vocab_file 'vocab.txt' --cuda --single --data_dir './data/fj16/' --testfname "${list}.linetoks" --test --words > "fj-output/${list}.adapting.output"  
-    time python main.py --model_file 'hidden650_batch128_dropout0.2_lr20.0.pt' --vocab_file 'vocab.txt' --cuda --single --lr ${learnrate} --data_dir './data/fj16/' --testfname "${list}.linetoks" --test --words --adapt --adapted_model "fj-output/adapted_model-${list}.pt" > "fj-output/${list}.adapting.output"  
-
+    time python main.py --model_file 'hidden650_batch128_dropout0.2_lr20.0.pt' --vocab_file 'vocab.txt' --cuda --single --lr ${learnrate} --data_dir './data/fj16/' --testfname "${list}.linetoks" --test --words --adapt --adapted_model "fj-output/adapted_model-${list}.pt" > "fj-output/${list}.adapting.output"
 ```
 
 Repeat the above for each list.
