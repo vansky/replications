@@ -1,0 +1,4 @@
+fdur
+z.(sentpos) + z.(wlen) + z.(surp50001) + z.(fixedunigram)
+z.(wlen)
+(1 | word)
