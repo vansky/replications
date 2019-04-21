@@ -47,7 +47,7 @@ Use these commands to get complexity measures for `naturalstories.linetoks`
 Combine the surp and entropy columns from each `%.results` file into a single `naturalstories.full.results` file.  
 Copy `naturalstories.full.results` to your `modelblocks-release/workspace/` directory  
 Copy `naturalstories/naturalstories_RTS/processed_RTs.tsv` to the `modelblocks-release/workspace` directory and cd to that directory.  
-Use these commands to get unigram measures (assumes `wikitext-103` corpus is in a self-named directory within your modelblocks project directory.  
+Use these commands to get unigram measures (assumes `wikitext-103` corpus is in a self-named directory within your modelblocks project directory).  
 ```
     echo 'word' > natstor.toks  
     sed 's/ /\n/g' genmodel/naturalstories.linetoks >> natstor.toks  
@@ -68,6 +68,8 @@ Merge those complexity measures with the reading times to get usable dataframes.
 ```
 
 That evmeasures file is then used to run all the regressions in the paper.
+
+### Run RT regressions
 
 ```
     ../resource-lmefit/scripts/evmeasures2lmefit.r naturalstories.lstm.filt.evmeasures rdata/naturalstories.lstm.filtunigram.both.lme.rdata -N -S -C -F -A futsurp50001+futentropy50001 -b scripts/spru.lmeform -o 5 -B 100 -U 3000 -d > results/naturalstories.lstm.filtunigram.-NSCFd.spru.surpent50001.lme  
