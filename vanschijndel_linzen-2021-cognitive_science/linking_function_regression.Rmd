@@ -1,0 +1,570 @@
+---
+title: "van Schijndel and Linzen (2021) linking function regression"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, tidy.opts=list(width.cutoff=60),tidy=TRUE)
+library(ggplot2)
+library(plyr)
+library(lme4)
+library(stringr)
+library(lmerTest)
+library(optimx)
+library('mgcv')
+library('dplyr')
+#load('filler_data.Rdata')
+```
+
+### Overview
+
+This code forks the preprocessing from Prasad & Linzen (2019) and combines it with the spillover RT regressions from Smith and Levy (2013).
+
+The CSVs in this code are available from the Prasad and Linzen (2019) OSF page: https://osf.io/57ckx/ experiment
+
+### Set up {#setup}
+
+#### Defining functions
+```{r, tidy=TRUE}
+data_summary <- function(data, varname, groupnames){
+  require(plyr)
+   length2 <- function (x, na.rm=FALSE) {
+        if (na.rm) sum(!is.na(x))
+        else       length(x)
+    }
+  summary_func <- function(x, col){
+    c(N    = length2(x[[col]], na.rm=TRUE),
+      mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func,
+                  varname)
+  data_sum <- plyr::rename(data_sum, c("mean" = varname))
+  
+  data_sum$se <- data_sum$sd / sqrt(data_sum$N)
+  
+  ciMult <- qt(0.95/2 + .5, data_sum$N-1)
+  data_sum$ci <- data_sum$se * ciMult
+ return(data_sum)
+}
+
+
+get_residuals <- function(d, x, y, col_name) {
+  fit <- lm( d[[y]] ~ (d[[x]]) )
+  new <- cbind(d, fit$residuals)
+  names(new)[[ncol(new)]] <- col_name
+  new
+}
+
+#used to get the disambiguating region
+get_diff <- function(d,colname_var, var1, var2, colname_val, new_colname) {
+  data_var1 <- subset(d, d[[colname_var]]==var1)
+  data_var2 <- subset(d, d[[colname_var]]==var2)
+  new <- data_var1
+  new[[new_colname]] <- data_var1[[colname_val]] - data_var2[[colname_val]]
+  return(new)
+}
+
+filter_data <- function(d, filt_var, filt_val){
+  m <- mean(d[[filt_var]])
+  s <- sd(d[[filt_var]])
+  subset(d, d[[filt_var]] > m-(filt_val*s) & d[[filt_var]] < m+(filt_val*s))
+}
+
+filter_participants <- function(df, col_name,col_value, acc_val) {
+  resp <- subset(df, df[[col_name]]!=col_value)
+  resp[[col_name]] = as.numeric(as.character(resp[[col_name]]))
+  resp_summary <- data_summary(resp, col_name, groupnames = c('participant'))
+  bad_parts <- subset(resp_summary, response < acc_val)$participant
+  return(subset(df, !(df$participant %in% bad_parts)))
+}
+
+remove_wrong <- function(d, wrong_df, part) {
+  curr_d <- subset(d, d$participant == part)
+  curr_wrong <- subset(wrong_df, wrong_df$participant == part)
+  bad_sents <- unique(curr_wrong$sentence)
+  return(subset(curr_d, !(curr_d$sentence %in% bad_sents)))
+}
+
+get_wrong <- function(d, wrong_df, part) {
+  curr_d <- subset(d, d$participant == part)
+  curr_wrong <- subset(wrong_df, wrong_df$participant == part)
+  bad_sents <- unique(curr_wrong$sentence)
+  return(subset(curr_d, curr_d$sentence %in% bad_sents))
+}
+
+c. <- function (x) scale(x, scale = FALSE)
+'%ni%'<- Negate("%in%")
+'%+=%' = function(e1,e2) eval.parent(substitute(e1 <- e1 + e2))
+'%-=%' = function(e1,e2) eval.parent(substitute(e1 <- e1 - e2))
+
+```
+
+#### Loading SPR data
+```{r, tidy=TRUE, cache=TRUE}
+spr <- read.csv('./Data/spr_unmodified_combined.csv')
+
+spr$block <- ceiling((spr$sent_num)/24)
+spr$word_length <- nchar(as.character(spr$word))
+
+#Changing labels
+spr$sentence_type <- ifelse(spr$sentence_type == 'NPS_unambig_unmodified', 'NPS Unambiguous',
+                            ifelse(spr$sentence_type == 'NPS_ambig_unmodified', 'NPS Ambiguous',
+                                 ifelse(spr$sentence_type == 'NPZ_ambig_unmodified', 'NPZ Ambiguous',
+                                        ifelse(spr$sentence_type == 'NPZ_unambig_unmodified', 'NPZ Unambiguous', 'Filler'))))
+
+spr$sentence <- trimws(as.character(spr$sentence))
+
+spr[spr$sent_id == ' filler18 ','sentence'] <- "The elderly gentleman sold a painting that had been in his family for over six generations because he had fallen upon hard times."
+spr[spr$sent_id == ' filler25 ','sentence'] <- "A cousin proved his social ineptness by making an insensitive joke at the funeral."
+spr['%2C' %in% spr$word,'word_length'] %-=% 2
+
+demographic <-  read.csv('./Data/demographic_unmodified_combined.csv', header = T, stringsAsFactors=FALSE)
+
+```
+
+#### Loading Model data
+```{r, tidy=TRUE, cache=TRUE}
+model_filler_data <- read.csv('./listA_filler_sentences.output.rolled',sep=';')
+#model_filler_data <- read.csv('./listA_filler_sentences.soap.output.rolled',sep=';')
+model_filler_conds <- read.csv('./listA_filler_conds.txt',sep=',')
+model_fillers_pre <- merge(x=model_filler_conds,y=model_filler_data,by='sentid')
+model_fillers_pre$word <- gsub("[^[:alnum:][:space:]]","",tolower(model_fillers_pre$word))
+model_fillers_pre$sentpos <- as.integer(model_fillers_pre$sentpos) + 1
+model_fillers_pre$sentence <- trimws(as.character(model_fillers_pre$sentence))
+
+freq_data <- read.csv('./bnc_freqs-lemmaspread.txt',sep='\t')
+freq_data$Word <- NULL
+freq_data$PoS <- NULL
+freq_data$Ra <- NULL
+freq_data$Disp <- NULL
+model_fillers <- merge(x=model_fillers_pre,y=freq_data,by='word',all.x=TRUE)
+model_fillers$logfreq <- log2(model_fillers$freq/1000000)
+
+model_fillers$word <- NULL
+
+```
+
+#### Combine Model and SPR data
+```{r, tidy=TRUE, cache=TRUE}
+spr <- merge(x=spr,y=model_fillers,by.x=c('sentence','sent_pos'),by.y=c('sentence','sentpos'),all.x=TRUE)
+
+spr <- 
+    spr %>%
+    dplyr::group_by_at(vars(sent_id,participant)) %>%
+    mutate(previous_surp = dplyr::lag(surp, n = 1, order_by=sent_pos, default = NA),
+           previous2_surp = dplyr::lag(surp, n = 2, order_by=sent_pos, default = NA),
+           previous3_surp = dplyr::lag(surp, n = 3, order_by=sent_pos, default = NA),
+           previous_entropy = dplyr::lag(entropy, n = 1, order_by=sent_pos, default = NA),
+           previous2_entropy = dplyr::lag(entropy, n = 2, order_by=sent_pos, default = NA),
+           previous3_entropy = dplyr::lag(entropy, n = 3, order_by=sent_pos, default = NA),
+           previous_entred = dplyr::lag(entred, n = 1, order_by=sent_pos, default = NA),
+           previous2_entred = dplyr::lag(entred, n = 2, order_by=sent_pos, default = NA),
+           previous3_entred = dplyr::lag(entred, n = 3, order_by=sent_pos, default = NA),
+           previous_length = dplyr::lag(word_length, n = 1, order_by=sent_pos, default = NA),
+           previous2_length = dplyr::lag(word_length, n = 2, order_by=sent_pos, default = NA),
+           previous3_length = dplyr::lag(word_length, n = 3, order_by=sent_pos, default = NA),
+           previous_logfreq = dplyr::lag(logfreq, n = 1, order_by=sent_pos, default = NA),
+           previous2_logfreq = dplyr::lag(logfreq, n = 2, order_by=sent_pos, default = NA),
+           previous3_logfreq = dplyr::lag(logfreq, n = 3, order_by=sent_pos, default = NA))
+```
+
+#### Filtering data
+
+```{r, cache=TRUE}
+# Exclude non-native speakers
+native <- subset(spr, trimws(as.character(participant)) %in% trimws(as.character(demographic[demographic$firstlang_eng != 'No',]$participant)))
+
+# Get accuracy of all filler items
+fillers <- subset(native, sentence_type == 'Filler')
+mean_accs_fillers_byitem <- ddply(fillers, .(sent_id), function(x) mean(x$response, na.rm=T))
+mean_accs_fillers_byitem$sent_id <- factor(mean_accs_fillers_byitem$sent_id, levels = unique(mean_accs_fillers_byitem$sent_id[order(mean_accs_fillers_byitem$V1)])) #reordering by accuracy
+
+ggplot(mean_accs_fillers_byitem,aes(x=sent_id, y=V1)) + geom_point() + labs(title = 'Mean accuracy for fillers', x = 'Fillers sorted by accuracy', y = 'Accuracy') + ylim(0, 1)
+
+# Get IDs of outliers that have accuracy below 2sd
+outliers <- unique(subset(mean_accs_fillers_byitem, V1 < mean(mean_accs_fillers_byitem$V1) - (2*sd(mean_accs_fillers_byitem$V1)))$sent_id)
+length(outliers)
+
+# Get mean accuracy for each participant excluding the outlier items
+mean_accs_fillers_byparticipant <- ddply(subset(fillers, !(sent_id %in% outliers)), .(participant,list), function(x) mean(x$response, na.rm=T))
+
+mean_accs_fillers_byparticipant$participant <- factor(mean_accs_fillers_byparticipant$participant, levels = unique(mean_accs_fillers_byparticipant$participant[order(mean_accs_fillers_byparticipant$V1)])) #reordering by accuracy
+
+ggplot(mean_accs_fillers_byparticipant,aes(x=participant, y=V1)) + geom_point() + labs(title = 'Mean filler accuracy for participants (excluding outlier fillers)', x = 'Participants sorted by accuracy', y = 'Accuracy') + ylim(0, 1)
+
+
+# Exclude participants with low accuracy 
+exclusion_value <- min(mean(mean_accs_fillers_byparticipant$V1) - sd(mean_accs_fillers_byparticipant$V1), 0.8)
+# i.e. one sd away or 0.8 - whichever is lower. (Because in general we are happy with 80% accuracy) 
+
+accurate <- subset(native, participant %in% mean_accs_fillers_byparticipant[mean_accs_fillers_byparticipant$V1 > exclusion_value,]$participant)
+accurate$region <- trimws(accurate$region)
+accurate$sentence <- trimws(accurate$sentence)
+
+# Exclude observations with RTs less than 100 and greater than 2000 ms
+no_questions <- subset(accurate, is.na(accurate$response))
+no_outliers <- subset(no_questions, rt > 100 & rt < 2000)
+
+# Exclude trials with incorrect response
+all_wrong <- subset(accurate, region == 'Question' & response == 0)
+no_wrong <- NULL
+wrong <- NULL
+
+for(part in unique(no_outliers$participant)) {
+  curr <- remove_wrong(no_outliers,all_wrong,part)
+  curr_wrong <- get_wrong(no_outliers, all_wrong, part)
+  no_wrong <- rbind(no_wrong,curr)
+  wrong <- rbind(wrong, curr_wrong)
+}
+
+# Length correction
+mixed_model <- lmer(log(rt) ~ scale(word_length) + (1+scale(word_length)|participant), no_wrong)
+no_wrong$corrected_log_rt <- residuals(mixed_model)
+
+# Exclude participants with mean RTs lower than 3 sds from mean RT for all participants
+mean_rt_bypart <- data_summary(no_wrong, 'rt', 'participant')
+mean_rt_bypart$participant <- factor(mean_rt_bypart$participant, levels = unique(mean_rt_bypart$participant[order(mean_rt_bypart$rt)]))
+
+slow_parts <- subset(mean_rt_bypart, rt > mean(mean_rt_bypart$rt) + 3*sd(mean_rt_bypart$rt))
+ggplot(mean_rt_bypart,aes(x=participant, y=rt)) + geom_point() + labs(title = 'Mean rt for each participant')
+
+no_slow_parts <- as.data.frame(subset(no_wrong, !(participant %in% unique(slow_parts$participant))))
+
+filler_data <- subset(no_slow_parts, !is.na(no_slow_parts$surp))
+filler_data <- subset(filler_data, !is.na(filler_data$previous_surp))
+filler_data <- subset(filler_data, !is.na(filler_data$previous2_surp))
+filler_data <- subset(filler_data, !is.na(filler_data$previous3_surp))
+filler_data <- subset(filler_data, !is.na(filler_data$logfreq))
+filler_data <- subset(filler_data, !is.na(filler_data$previous_logfreq))
+filler_data <- subset(filler_data, !is.na(filler_data$previous2_logfreq))
+filler_data <- subset(filler_data, !is.na(filler_data$previous3_logfreq))
+filler_data <- subset(filler_data, !is.na(filler_data$entropy))
+filler_data <- subset(filler_data, !is.na(filler_data$previous_entropy))
+filler_data <- subset(filler_data, !is.na(filler_data$previous2_entropy))
+filler_data <- subset(filler_data, !is.na(filler_data$previous3_entropy))
+filler_data <- subset(filler_data, !is.na(filler_data$entred))
+filler_data <- subset(filler_data, !is.na(filler_data$previous_entred))
+filler_data <- subset(filler_data, !is.na(filler_data$previous2_entred))
+filler_data <- subset(filler_data, !is.na(filler_data$previous3_entred))
+filler_data$response <- NULL
+filler_data$X <- NULL
+filler_data$clogprob <- -filler_data$surp
+filler_data$previous_clogprob <- -filler_data$previous_surp
+filler_data$previous2_clogprob <- -filler_data$previous2_surp
+filler_data$previous3_clogprob <- -filler_data$previous3_surp
+
+```
+#### Filter summary
+```{r}
+# Number of non-native speakers excluded
+length(unique(spr$participant)) - length(unique(native$participant)) 
+
+# Number of participants with low accuracy excluded
+length(unique(native$participant)) - length(unique(accurate$participant))
+
+# % trials with RT < 100 or RT > 2000 excluded
+(nrow(no_questions) - nrow(no_outliers))*100/nrow(no_questions)
+
+# Total % of incorrect trials excluded 
+nrow(wrong)*100/nrow(no_outliers)  #6.11
+
+# % Incorrect filler trials excluded
+nrow(subset(wrong, sentence_type == 'Filler'))*100/ nrow(subset(no_outliers, sentence_type == 'Filler'))
+
+# % Incorrect NPS ambig trials excluded
+nrow(subset(wrong, sentence_type == 'NPS Ambiguous'))*100/ nrow(subset(no_outliers, sentence_type == 'NPS Ambiguous'))
+
+# % Incorrect NPS unambig trials excluded
+nrow(subset(wrong, sentence_type == 'NPS Unambiguous'))*100/ nrow(subset(no_outliers, sentence_type == 'NPS Unambiguous'))
+
+# % Incorrect NPZ ambig trials excluded
+nrow(subset(wrong, sentence_type == 'NPZ Ambiguous'))*100/ nrow(subset(no_outliers, sentence_type == 'NPZ Ambiguous'))
+
+# % Incorrect NPZ unambig trials excluded
+nrow(subset(wrong, sentence_type == 'NPZ Unambiguous'))*100/ nrow(subset(no_outliers, sentence_type == 'NPS Unambiguous'))
+
+# Number of slow participants excluded
+length(unique(no_wrong$participant)) - length(unique(no_slow_parts$participant))
+
+```
+
+## Identify linking function
+
+```{r}
+
+# SL13 used minprob -6.0
+minprob <- -6.0
+
+#SL13 used df=20
+df <- 20
+
+ggplot.model <- function(model, type="conditional", res=FALSE, 
+                         col.line="#7fc97f", col.point="#beaed4", size.line=1, size.point=1) {
+  require(visreg)
+  require(plyr)
+  plotdata <- visreg(model, type = type, plot = FALSE)
+  smooths <- ldply(plotdata, function(part)   
+    data.frame(Variable = part$meta$x, 
+               x=part$fit[[part$meta$x]], 
+               smooth=part$fit$visregFit, 
+               lower=part$fit$visregLwr, 
+               upper=part$fit$visregUpr))
+  residuals <- ldply(plotdata, function(part)
+    data.frame(Variable = part$meta$x, 
+               x=part$res[[part$meta$x]], 
+               y=part$res$visregRes))
+  
+  goodsmooths <- c('logprob','previous_logprob','previous2_logprob','previous3_logprob') #levels(unique(smooths$Variable))[1:4]
+  
+  smooths <- smooths[smooths$Variable %in% goodsmooths,]
+  
+  baselinedsmooths <- NULL
+  
+  ## Baseline to "perfectly predictable word" (aka last item in each smooth)
+  for (meas in goodsmooths[1:4]){
+    newsmooth <- smooths[smooths$Variable == meas,]
+    
+    print(meas)
+    
+    perfect <- tail(newsmooth$smooth,1)
+    newsmooth$smooth <- newsmooth$smooth - perfect
+    convfactor2 <- (head(newsmooth[newsmooth$x > minprob,]$smooth,1)-tail(newsmooth$smooth,1))/19.931568569324178
+    convfactore <- (head(newsmooth[newsmooth$x > minprob,]$smooth,1)-tail(newsmooth$smooth,1))/13.815510557964275
+    print(paste('top',head(newsmooth[newsmooth$x > minprob,]$smooth,1),'bottom',tail(newsmooth$smooth,1),'e',convfactore,'2',convfactor2))
+    newsmooth$upper <- newsmooth$upper - perfect
+    newsmooth$lower <- newsmooth$lower - perfect
+    
+    baselinedsmooths <- rbind(baselinedsmooths,newsmooth)
+  }
+  
+  baselinedsmooths$x <- as.numeric(baselinedsmooths$x)
+  
+  if (res)
+    ggplot(baselinedsmooths, aes(x, smooth)) + geom_line(col=col.line, size=size.line) +
+    geom_line(aes(y=lower), linetype="dashed", col=col.line, size=size.line) +
+    geom_line(aes(y=upper), linetype="dashed", col=col.line, size=size.line) +
+    geom_point(data = residuals, aes(x, y), col=col.point, size=size.point) +
+    facet_grid(. ~ Variable, scales = "free_x") + xlim(minprob,0)
+  else
+    ggplot(baselinedsmooths, aes(x, smooth)) + geom_line(col=col.line, size=size.line) +
+    geom_line(aes(y=lower), linetype="dashed", col=col.line, size=size.line) +
+    geom_line(aes(y=upper), linetype="dashed", col=col.line, size=size.line) +
+    facet_grid(. ~ Variable, scales = "free_x") + xlim(minprob,0)
+}
+
+ggplot.modelsurp <- function(model, type="conditional", res=FALSE, 
+                         col.line="#7fc97f", col.point="#beaed4", size.line=1, size.point=1) {
+  require(visreg)
+  require(plyr)
+  plotdata <- visreg(model, type = type, plot = FALSE)
+  smooths <- ldply(plotdata, function(part)   
+    data.frame(Variable = part$meta$x, 
+               x=part$fit[[part$meta$x]], 
+               smooth=part$fit$visregFit, 
+               lower=part$fit$visregLwr, 
+               upper=part$fit$visregUpr))
+  residuals <- ldply(plotdata, function(part)
+    data.frame(Variable = part$meta$x, 
+               x=part$res[[part$meta$x]], 
+               y=part$res$visregRes))
+  
+  goodsmooths <- c('surp','previous_surp','previous2_surp','previous3_surp') #levels(unique(smooths$Variable))[1:4]
+  
+  smooths <- smooths[smooths$Variable %in% goodsmooths,]
+  
+  baselinedsmooths <- NULL
+  
+  ## Baseline to "perfectly predictable word" (aka last item in each smooth)
+  for (meas in goodsmooths[1:4]){
+    newsmooth <- smooths[smooths$Variable == meas,]
+    
+    print(meas)
+    
+    perfect <- tail(newsmooth$smooth,1)
+    newsmooth$smooth <- newsmooth$smooth - perfect
+    convfactor2 <- (head(newsmooth[newsmooth$x > minprob,]$smooth,1)-tail(newsmooth$smooth,1))/19.931568569324178
+    convfactore <- (head(newsmooth[newsmooth$x > minprob,]$smooth,1)-tail(newsmooth$smooth,1))/13.815510557964275
+    print(paste('top',head(newsmooth[newsmooth$x > minprob,]$smooth,1),'bottom',tail(newsmooth$smooth,1),'e',convfactore,'2',convfactor2))
+    newsmooth$upper <- newsmooth$upper - perfect
+    newsmooth$lower <- newsmooth$lower - perfect
+    
+    baselinedsmooths <- rbind(baselinedsmooths,newsmooth)
+  }
+  
+  baselinedsmooths$x <- as.numeric(baselinedsmooths$x)
+  
+  if (res)
+    ggplot(baselinedsmooths, aes(x, smooth)) + geom_line(col=col.line, size=size.line) +
+    geom_line(aes(y=lower), linetype="dashed", col=col.line, size=size.line) +
+    geom_line(aes(y=upper), linetype="dashed", col=col.line, size=size.line) +
+    geom_point(data = residuals, aes(x, y), col=col.point, size=size.point) +
+    facet_grid(. ~ Variable, scales = "free_x") + xlim(minprob,0)
+  else
+    ggplot(baselinedsmooths, aes(x, smooth)) + geom_line(col=col.line, size=size.line) +
+    geom_line(aes(y=lower), linetype="dashed", col=col.line, size=size.line) +
+    geom_line(aes(y=upper), linetype="dashed", col=col.line, size=size.line) +
+    facet_grid(. ~ Variable, scales = "free_x") + xlim(minprob,0)
+}
+
+ggplot.aggmodel <- function(model, type="conditional", res=FALSE, 
+                         col.line="#7fc97f", col.point="#beaed4", size.line=1, size.point=1) {
+  require(visreg)
+  require(plyr)
+  plotdata <- visreg(model, type = type, plot = FALSE)
+  smooths <- ldply(plotdata, function(part)   
+    data.frame(Variable = part$meta$x, 
+               x=part$fit[[part$meta$x]], 
+               smooth=part$fit$visregFit, 
+               lower=part$fit$visregLwr, 
+               upper=part$fit$visregUpr))
+  residuals <- ldply(plotdata, function(part)
+    data.frame(Variable = part$meta$x, 
+               x=part$res[[part$meta$x]], 
+               y=part$res$visregRes))
+  
+  goodsmooths <- c('logprob','previous_logprob','previous2_logprob','previous3_logprob')
+  
+  summedsmooths <- smooths[smooths$Variable == goodsmooths[1],]
+  myx <- as.numeric(summedsmooths$x)
+  
+  for (meas in goodsmooths[2:4]){
+    summedsmooths$smooth <- summedsmooths$smooth + smooths[smooths$Variable == meas,]$smooth
+    summedsmooths$upper <- summedsmooths$upper + smooths[smooths$Variable == meas,]$upper
+    summedsmooths$lower <- summedsmooths$lower + smooths[smooths$Variable == meas,]$lower
+  }
+  
+  summedsmooths$x <- myx
+  
+  convfactor2 <- (head(summedsmooths[summedsmooths$x >= minprob,]$smooth,1)-tail(summedsmooths$smooth,1))/19.931568569324178
+  convfactore <- (head(summedsmooths[summedsmooths$x >= minprob,]$smooth,1)-tail(summedsmooths$smooth,1))/13.815510557964275
+  
+  perfect <- tail(summedsmooths$smooth,1)
+  summedsmooths$smooth <- summedsmooths$smooth - perfect
+  summedsmooths$upper <- summedsmooths$upper - perfect
+  summedsmooths$lower <- summedsmooths$lower - perfect
+  
+  print("agg conversion factor")
+  print(paste('top',head(summedsmooths[summedsmooths$x > minprob,]$smooth,1),'e',convfactore,'2',convfactor2))
+  
+  if (res)
+    ggplot(summedsmooths, aes(x, smooth)) + geom_line(col=col.line, size=size.line) +
+    geom_line(aes(y=lower), linetype="dashed", col=col.line, size=size.line) +
+    geom_line(aes(y=upper), linetype="dashed", col=col.line, size=size.line) +
+    geom_point(data = residuals, aes(x, y), col=col.point, size=size.point) +
+    facet_grid(. ~ Variable, scales = "free_x") + xlim(minprob,0)
+  else
+    ggplot(summedsmooths, aes(x, smooth)) + geom_line(col=col.line, size=size.line) +
+    geom_line(aes(y=lower), linetype="dashed", col=col.line, size=size.line) +
+    geom_line(aes(y=upper), linetype="dashed", col=col.line, size=size.line) + xlim(minprob,0)
+}
+
+formula.20 <- rt ~ s(logprob, bs = "cr", k = 20) + s(previous_logprob, bs = "cr", k = 20) + 
+  s(previous2_logprob, bs = "cr", k = 20) + 
+  s(previous3_logprob, bs = "cr", k = 20) + 
+  s(text_pos, bs = "cr", k = 20) + te(bnc1,length, bs = "cr") + 
+  te(previous_bnc1, previous_length, bs = "cr") + 
+  te(previous2_bnc1, previous2_length, bs = "cr") + 
+  te(previous3_bnc1, previous3_length, bs = "cr") +
+  subject
+
+formula.fx <- rt ~ s(logprob, bs = "cr", k = -1) + s(previous_logprob, bs = "cr", k = -1) + 
+  s(previous2_logprob, bs = "cr", k = -1) + 
+  s(previous3_logprob, bs = "cr", k = -1) + 
+  s(text_pos, bs = "cr", k = -1) + te(bnc1,length, bs = "cr") + 
+  te(previous_bnc1, previous_length, bs = "cr") + 
+  te(previous2_bnc1, previous2_length, bs = "cr") + 
+  te(previous3_bnc1, previous3_length, bs = "cr")
+
+formula.linearnosubj <- rt ~ logprob + previous_logprob + 
+  previous2_logprob + previous3_logprob + 
+  s(sent_pos, bs = "cr", k = -1) 
+
+formula.nosubj <- rt ~ s(logprob, bs = "cr", k = 20) + s(previous_logprob, bs = "cr", k = 20) + 
+  s(previous2_logprob, bs = "cr", k = 20) + s(previous3_logprob, bs = "cr", k = 20) + 
+  s(sent_pos, bs = "cr", k = 20) + te(bnc1, length, bs = "cr") + te(previous_bnc1, previous_length, bs = "cr") + 
+  te(previous2_bnc1, previous2_length, bs = "cr") + te(previous3_bnc1, previous3_length, bs = "cr")
+
+formula.nosubj.new <- rt ~ s(logprob, bs = "cr", k = df) + s(previous_logprob, bs = "cr", k = df) + 
+  s(previous2_logprob, bs = "cr", k = df) + s(previous3_logprob, bs = "cr", k = df) + 
+  s(sent_pos, bs = "cr", k = df) + 
+  s(word_length, bs = "cr") + s(previous_length, bs = "cr") + s(previous2_length, bs = "cr") + s(previous3_length, bs = "cr")
+
+formula.nosubj.newsurp <- rt ~ s(surp, bs = "cr", k = df) + s(previous_surp, bs = "cr", k = df) + 
+  s(previous2_surp, bs = "cr", k = df) + s(previous3_surp, bs = "cr", k = df) #+ 
+  #s(sent_pos, bs = "cr", k = df)
+
+formula.lm <- rt ~ surp + previous_surp + previous2_surp + previous3_surp + sent_pos + 
+  logfreq*wlen + previous_logfreq*previous_length + previous2_logfreq*previous2_length + previous3_logfreq*previous3_length
+
+formula.biglm <- rt ~ surp + previous_surp + previous2_surp + previous3_surp + 
+  entropy + previous_entropy + previous2_entropy + previous3_entropy + 
+  entred + previous_entred + previous2_entred + previous3_entred + 
+  sent_pos + 
+  logfreq*wlen + previous_logfreq*previous_length + previous2_logfreq*previous2_length + previous3_logfreq*previous3_length
+
+formula.lmer <- rt ~ surp + previous_surp + previous2_surp + previous3_surp + 
+  sent_pos + 
+  logfreq*wlen + previous_logfreq*previous_length + previous2_logfreq*previous2_length + previous3_logfreq*previous3_length + (1|participant)
+
+formula.biglmer <- rt ~ surp + previous_surp + previous2_surp + previous3_surp + 
+  entropy + previous_entropy + previous2_entropy + previous3_entropy + 
+  entred + previous_entred + previous2_entred + previous3_entred + 
+  sent_pos + 
+  logfreq*wlen + previous_logfreq*previous_length + previous2_logfreq*previous2_length + previous3_logfreq*previous3_length + (1|participant)
+
+# not enough memory to run random by-subject slopes
+# formula.subj.new <- rt ~ s(logprob, bs = "cr", k = 20) + s(previous_logprob, bs = "cr", k = 20) + 
+#   s(previous2_logprob, bs = "cr", k = 20) + s(previous3_logprob, bs = "cr", k = 20) + 
+#   s(sent_pos, bs = "cr", k = 20) + s(participant, bs='re') +
+#   s(word_length, bs = "cr") + s(previous_length, bs = "cr") + s(previous2_length, bs = "cr") + s(previous3_length, bs = "cr")
+
+```
+
+#### Only link to fillers
+```{r}
+#save(filler_data,file = 'filler_data.Rdata')
+
+```
+
+#### Identify linking function
+
+```{r}
+
+model.lm <- lm(formula.lm,data=filler_data)
+model.lmer <- lmer(formula.lmer,data=filler_data)
+model.biglm <- lm(formula.biglm,data=filler_data)
+model.biglmer <- lmer(formula.biglmer,data=filler_data)
+```
+
+#### Results
+```{r}
+summary(model.lmer)
+
+```
+
+#### Results
+```{r}
+summary(model.biglm)
+
+```
+
+#### Results
+```{r}
+summary(model.biglmer)
+
+```
+
+#### Soap Results
+```{r}
+summary(model.lmer)
+
+```
+
+
+#### Big LMER Soap Results
+```{r}
+summary(model.biglmer)
+
+```
+
