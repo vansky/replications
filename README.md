@@ -1,6 +1,10 @@
 # Replications Repository
 Detailed instructions for replicating some of my paper results
 
+* [Marten van Schijndel and Tal Linzen. "Single-stage prediction models do not explain the magnitude of syntactic disambiguation difficulty" In _Cognitive Science_, 45 (6): e12988. 2021.](https://vansky.github.io/assets/pdf/vanschijndel_linzen-2021-cogscij.pdf)
+
+  Introduces a method for converting surprisal into reading time predictions. Uses the method to show that, while surprisal can predict the existence of garden path effects in reading times, surprisal and other information-theoretic measures are unable to predict the magnitude of garden path effects in reading times. Suggests there are likely overt repair mechanisms at work in garden path processing, which are not captured by text statistics alone.
+
 * [Marten van Schijndel and Tal Linzen. "Can Entropy Explain Successor Surprisal Effects in Reading?" In Proceedings of SCiL. 2019.](https://vansky.github.io/assets/pdf/vanschijndel_linzen-2019-scil.pdf)
 
   Explores the extent to which the future surprisal effect in reading times is purely a consequence of reader uncertainty about the future. Also explores whether humans make boundedly rational predictions when they read (Simon, 1982), or whether they compute some composite of all (or a very large number) of future states. We find that future surprisal is not wholly explained by future entropy, and we find that the model that best predicts reading times does not restrict the number of predictions available to the model (contra bounded rationality).
