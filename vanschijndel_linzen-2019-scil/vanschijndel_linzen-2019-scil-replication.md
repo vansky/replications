@@ -51,7 +51,7 @@ Use these commands to get unigram measures (assumes `wikitext-103` corpus is in 
 ```
     echo 'word' > natstor.toks  
     sed 's/ /\n/g' genmodel/naturalstories.linetoks >> natstor.toks  
-    cut -d' ' -f2- naturalstories.full.results | paste -d' ' natstor.toks - > naturalstories.full.results.fullwords  
+    cut -d' ' -f2- naturalstories.full.results | paste -d' ' natstor.toks - > naturalstories.results.fullwords  
     python scripts/calcunigram.py < wikitext-103/wiki.train.tokens > unigrams.txt  
     python scripts/insertunigrams.py unigrams.txt naturalstories.results.fullwords > naturalstories.fullunigram.results
 ```
