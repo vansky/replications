@@ -59,8 +59,8 @@ Use these commands to get unigram measures (assumes `wikitext-103` corpus is in 
 Merge those complexity measures with the reading times to get usable dataframes.
 ```
     make genmodel/naturalstories.mfields.itemmeasures  
-    paste -d' ' natstor.toks <(cut -d' ' -f2- naturalstories.fullunigram.results) | python ../resource-rt/scripts/roll_toks.py <(sed 's/(/-LRB-/g;s/)/-RRB-/g;' naturalstories.mfields.itemmeasures) sentid sentpos > naturalstories.lstm.itemmeasures  
-    cut -d' ' -f4- naturalstories.lstm.itemmeasures  | paste -d' ' naturalstories.mfields.itemmeasures - > naturalstories.lstm.mergable.itemmeasures  
+    paste -d' ' natstor.toks <(cut -d' ' -f2- naturalstories.fullunigram.results) | python ../resource-rt/scripts/roll_toks.py <(sed 's/(/-LRB-/g;s/)/-RRB-/g;' genmodel/naturalstories.mfields.itemmeasures) sentid sentpos > naturalstories.lstm.itemmeasures  
+    cut -d' ' -f4- naturalstories.lstm.itemmeasures  | paste -d' ' genmodel/naturalstories.mfields.itemmeasures - > naturalstories.lstm.mergable.itemmeasures  
     python ../resource-naturalstories/scripts/merge_natstor.py <(cat processed_RTs.tsv | sed 's/\t/ /g;s/peaked/peeked/g;' | python ../resource-rt/scripts/rename_cols.py WorkerId subject RT fdur) naturalstories.lstm.mergable.itemmeasures | sed 's/``/'\''/g;s/'\'\''/'\''/g;s/(/-LRB-/g;s/)/-RRB-/g;' | python ../resource-rt/scripts/rename_cols.py item docid > naturalstories.lstm.core.evmeasures  
     python ../resource-rt/scripts/rm_unfix_items.py < naturalstories.lstm.core.evmeasures | python ../resource-rt/scripts/futureMetrics.py -I -c surp50001 entropy5 entropy50 entropy500 entropy5000 entropy50001 unigram | python ../resource-rt/scripts/rm_na_items.py | grep -v '<unk>' | python scripts/removerolled.py > naturalstories.lstm.filt.evmeasures  
     mkdir rdata  
